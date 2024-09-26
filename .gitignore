@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+
+# Django
+*.log
+*.pot
+*.pyc
+media/
+static/
+
+# IDEs and Editors
+.vscode/
+.idea/
