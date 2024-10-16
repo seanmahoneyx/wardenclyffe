@@ -78,11 +78,15 @@ class Item(models.Model):
         ('k', 'Kraft'),
         ('mw', 'Mottled White'),
     ]
+    ITEM_TYPES = [
+        ('i', 'Inventory'),
+        ('n', 'Non-Inventory'),
+    ]
     
-    # MODEL FIELDS
     item_name = models.CharField(unique=True, max_length=100)
     create_date = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
     active_status = models.BooleanField(default=True)
+    item_type = models.CharField(choices=ITEM_TYPES)
     revision = models.PositiveSmallIntegerField(blank=True, null=True)
     division = models.CharField(choices=DIVISION_TYPES)
     purch_desc = models.TextField(verbose_name="Purchase Description")
@@ -131,7 +135,7 @@ class Employee(models.Model):
 class Terms(models.Model):
     name = models.CharField(unique=True, max_length=100, blank=False)
     net_due = models.PositiveSmallIntegerField()
-    discount_percent = models.PositiveSmallIntegerField()  # Add validators if needed
+    discount_percent = models.PositiveSmallIntegerField()
     discount_days = models.PositiveSmallIntegerField()
     active_status = models.BooleanField(default=True)
 
@@ -140,7 +144,7 @@ class Terms(models.Model):
 
 class Tax(models.Model):
     code = models.CharField(unique=True, max_length=20, blank=False)
-    tax_percent = models.PositiveSmallIntegerField()  # Add validators if needed
+    tax_percent = models.PositiveSmallIntegerField()
     active_status = models.BooleanField(default=True)
 
     def __str__(self):
@@ -150,7 +154,7 @@ class Account(models.Model):
     active_status = models.BooleanField(default=True)
     account_type = models.CharField(max_length=50, blank=False)
     account_name = models.CharField(unique=True, max_length=100, blank=False)
-    account_desc = models.TextField(blank=True)  # Optional description
+    account_desc = models.TextField(blank=True)
     parent_account = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null=True, related_name='subaccounts')
 
     def __str__(self):
@@ -202,9 +206,24 @@ class Vendor(models.Model):
     def __str__(self):
         return self.vendor_name
 
+#TODO
+#class ShipTo
+#class ShipFrom
 
-### DYNAMIC MODELS ###
+############ DYNAMIC MODELS ##################
 
 #TODO
-# 1. Transaction model
-# 2. Inventory model
+# Transaction models
+# Sales Order, Purchase Order, Invoice, Bill, Item Receipt, Credit Memo, 
+# Vendor Credit, Inventory Adjustment, Quote, Blanket, Contract
+
+class Transaction(models.Model):
+    
+    def __str__(self):
+        return f"{self.transaction_type}# {self.transaction_num}"
+    
+# Inventory model
+
+# Vendor Price List (header + body)
+
+# Customer Price List (header + body)
