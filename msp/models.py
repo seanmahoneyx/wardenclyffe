@@ -214,14 +214,33 @@ class Vendor(models.Model):
 
 #TODO
 # Transaction models
-# Sales Order, Purchase Order, Invoice, Bill, Item Receipt, Credit Memo, 
-# Vendor Credit, Inventory Adjustment, Quote, Blanket, Contract
+# NONPOSTING- Sales Order, Purchase Order, Quote, Blanket, Contract 
+# POSTING- Invoice, Bill, Item Receipt, Credit Memo, Vendor Credit, Inventory Adjustment, 
 
-class Transaction(models.Model):
-    
+class DirectOrderHead(models.Model):
+    customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    number = models.CharField(max_length=50, unique=True, null=False, blank=False)
+    bill_to = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='billto_address')
+    ship_to = models.ForeignKey('ShipTo', on_delete=models.PROTECT, null=False)
+    customer_order_number = models.CharField(max_length=100, blank=True)
+    terms = models.ForeignKey('Terms', on_delete=models.SET_NULL, null=False)
+    requested_date = models.DateField()
+    sales_rep = models.ForeignKey('SalesRep', on_delete=models.PROTECT, null=False)
+    ms_po_number = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='ms_po_number')
+    vendor_due_date = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='vendor_due_date')
+    ship_from = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='ship_from')
+    csr = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, related_name='csr')
+    buyer = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='buyer')
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
+
     def __str__(self):
-        return f"{self.transaction_type}# {self.transaction_num}"
+        return f"Direct Order {self.number} for {self.customer}"
+
     
+    
+
+        
 # Inventory model
 
 # Vendor Price List (header + body)
