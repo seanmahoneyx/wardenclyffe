@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 ### STATIC MODELS ###
@@ -85,7 +86,7 @@ class Item(models.Model):
     
     item_name = models.CharField(unique=True, max_length=100)
     create_date = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
     item_type = models.CharField(choices=ITEM_TYPES)
     revision = models.PositiveSmallIntegerField(blank=True, null=True)
     division = models.CharField(choices=DIVISION_TYPES)
@@ -95,7 +96,7 @@ class Item(models.Model):
     test = models.CharField(choices=CATEGORY_TYPES, max_length=10)
     flute = models.CharField(max_length=6)
     paper = models.CharField(max_length=4)
-    printed = models.BooleanField(default=False)
+    is_printed = models.BooleanField(default=False)
     panels_ptd = models.PositiveSmallIntegerField(blank=True, null=True)
     colors_ptd = models.PositiveSmallIntegerField(blank=True, null=True)
     ink_list = models.TextField()
@@ -107,6 +108,9 @@ class Item(models.Model):
     asset_acct = models.ForeignKey('Account',blank=False, on_delete=models.SET_NULL, null=True)
     sale_acct = models.ForeignKey('Account',blank=False, on_delete=models.SET_NULL, null=True)
     customer = models.ForeignKey('Customer',blank=False, on_delete=models.SET_NULL, null=True)
+    is_taxable = models.BooleanField(default=False, blank=False, null=False)
+    tax = models.ForeignKey('Tax',blank=True, on_delete=models.SET_NULL, null=True)
+    
     
     def __str__(self):
         return self.item_name
@@ -116,7 +120,7 @@ class Salesrep(models.Model):
     last_name = models.CharField(max_length=50, blank=False)
     email = models.EmailField(max_length=254, blank=True)
     phone_number = models.CharField(max_length=15, blank=True)
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -127,7 +131,7 @@ class Employee(models.Model):
     last_name = models.CharField(max_length=50, blank=False)
     email = models.EmailField(max_length=254, blank=True)
     phone_number = models.CharField(max_length=15, blank=True)
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -137,7 +141,7 @@ class Terms(models.Model):
     net_due = models.PositiveSmallIntegerField()
     discount_percent = models.PositiveSmallIntegerField()
     discount_days = models.PositiveSmallIntegerField()
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -145,13 +149,13 @@ class Terms(models.Model):
 class Tax(models.Model):
     code = models.CharField(unique=True, max_length=20, blank=False)
     tax_percent = models.PositiveSmallIntegerField()
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.code
 
 class Account(models.Model):
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
     account_type = models.CharField(max_length=50, blank=False)
     account_name = models.CharField(unique=True, max_length=100, blank=False)
     account_desc = models.TextField(blank=True)
@@ -163,12 +167,12 @@ class Account(models.Model):
 class Customer(models.Model):
     customer_name = models.CharField(unique=True, max_length=100, blank=False)
     create_date = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
-    active_status = models.BooleanField(default=True)
-    bill_street = models.CharField(max_length=100, blank=True)
-    bill_pobox = models.CharField(max_length=100, blank=True)
-    bill_city = models.CharField(max_length=60, blank=True)
-    bill_state = models.CharField(max_length=2, blank=True)
-    bill_zip = models.PositiveIntegerField(blank=True)
+    is_active = models.BooleanField(default=True)
+    bill_street = models.CharField(max_length=100, blank=False)
+    bill_pobox = models.CharField(max_length=100, blank=False)
+    bill_city = models.CharField(max_length=60, blank=False)
+    bill_state = models.CharField(max_length=2, blank=False)
+    bill_zip = models.PositiveIntegerField(blank=False)
     main_phone = models.CharField(max_length=15, blank=True)
     main_email = models.EmailField(max_length=254, blank=True)
     ap_email = models.EmailField(max_length=254, blank=True)
@@ -179,6 +183,7 @@ class Customer(models.Model):
     csr = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True)
     terms = models.ForeignKey(Terms, on_delete=models.SET_NULL, null=True)
     tax_code = models.ForeignKey(Tax, on_delete=models.SET_NULL, null=True)
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
 
     def __str__(self):
         return self.customer_name
@@ -186,7 +191,7 @@ class Customer(models.Model):
 class Vendor(models.Model):
     vendor_name = models.CharField(unique=True, max_length=100, blank=False)
     create_date = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
-    active_status = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
     bill_street = models.CharField(max_length=100, blank=True)
     bill_pobox = models.CharField(max_length=100, blank=True)
     bill_city = models.CharField(max_length=60, blank=True)
@@ -200,15 +205,34 @@ class Vendor(models.Model):
     credit_limit = models.PositiveIntegerField()
     check_name = models.CharField(max_length=150, blank=True)
     tax_id = models.CharField(max_length=20, blank=True)
-    vend_1099 = models.BooleanField(default=True)
+    is_1099 = models.BooleanField(default=False, blank=False)
     terms = models.ForeignKey(Terms, on_delete=models.SET_NULL, null=True)
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
 
     def __str__(self):
         return self.vendor_name
 
-#TODO
-#class ShipTo
-#class ShipFrom
+class Location(models.Model):
+    is_active = models.BooleanField(default=True)    
+    customer = models.ForeignKey('Customer', on_delete=models.CASCADE, null=True, blank=True)   
+    location_name = models.CharField(max_length=100, unique=True)
+    street = models.CharField(max_length=100, blank=False)
+    pobox = models.CharField(max_length=100, blank=False)
+    city = models.CharField(max_length=60, blank=False)
+    state = models.CharField(max_length=2, blank=False)
+    zip = models.PositiveIntegerField(blank=False)
+    contact_name = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="name")
+    contact_phone = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="phone")
+    contact_email = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="email")
+    delivery_open = models.TimeField()
+    delivery_close = models.TimeField()
+    is_boxtruck_able = models.BooleanField(default=True, null=False, blank=False)
+    is_trailer_able = models.BooleanField(default=True, null=False, blank=False)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.customer} {self.ship_to_name}"
+
 
 ############ DYNAMIC MODELS ##################
 
@@ -217,26 +241,72 @@ class Vendor(models.Model):
 # NONPOSTING- Sales Order, Purchase Order, Quote, Blanket, Contract 
 # POSTING- Invoice, Bill, Item Receipt, Credit Memo, Vendor Credit, Inventory Adjustment, 
 
-class DirectOrderHead(models.Model):
+class ContractHead(models.Model):
+    customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    begin_effective_date = models.DateField(default=timezone.now, null=False, blank=False)
+    end_effective_date = models.DateField(null=True, blank=True)
+    reference_number = models.CharField(max_length=50, unique=True, null=False, blank=False)
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
+    
+    def __str__(self):
+        return f"Contract {self.reference_number} - {self.customer}"
+
+class ContractLine(models.Model):
+    contract = models.ForeignKey(ContractHead, on_delete=models.CASCADE, related_name='contract_items')
+    item = models.ForeignKey('Item', on_delete=models.PROTECT)
+    contract_quantity = models.PositiveIntegerField(null=False, blank=False)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+    minimum_release_quantity = models.PositiveIntegerField(null=False, blank=False)
+    purchased_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
+    received_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
+    sold_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
+    
+    def __str__(self):
+        return f"Item {self.item} in Contract {self.contract.reference_number}"
+    
+
+class DropShipHead(models.Model):
     customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
     date_created = models.DateTimeField(auto_now_add=True, null=False)
     number = models.CharField(max_length=50, unique=True, null=False, blank=False)
-    bill_to = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='billto_address')
-    ship_to = models.ForeignKey('ShipTo', on_delete=models.PROTECT, null=False)
-    customer_order_number = models.CharField(max_length=100, blank=True)
-    terms = models.ForeignKey('Terms', on_delete=models.SET_NULL, null=False)
+    bill_street = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_street')
+    bill_pobox = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_pobox')
+    bill_city = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_city')
+    bill_state = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_state')
+    bill_zip = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_zip')
+    ship_street = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_pobox = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_city = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_state = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_zip = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='zip')
+    customer_order_number = models.CharField(max_length=50, blank=True)
+    terms = models.ForeignKey('Terms', on_delete=models.PROTECT, null=False)
     requested_date = models.DateField()
     sales_rep = models.ForeignKey('SalesRep', on_delete=models.PROTECT, null=False)
     ms_po_number = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='ms_po_number')
     vendor_due_date = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='vendor_due_date')
-    ship_from = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='ship_from')
-    csr = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, related_name='csr')
-    buyer = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='buyer')
+    ship_from = models.ForeignKey('PurchaseOrder', on_delete=models.PROTECT, null=True, related_name='ship_from')
+    csr = models.ForeignKey('Employee', on_delete=models.PROTECT, null=True, related_name='csr')
+    buyer = models.ForeignKey('PurchaseOrder', on_delete=models.PROTECT, null=True, related_name='buyer')
     attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
 
     def __str__(self):
         return f"Direct Order {self.number} for {self.customer}"
 
+class DropShipLine(models.Model):
+    dropship_head = models.ForeignKey('DropShipHead', on_delete=models.CASCADE, related_name='order_lines')
+    item = models.ForeignKey('Item', on_delete=models.PROTECT, blank=False, null=False)
+    quantity = models.PositiveIntegerField(null=False, blank=False) 
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True)
+    tax = models.ForeignKey('Tax', on_delete=models.PROTECT, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True) 
+    
+
+    def __str__(self):
+        return f"Item {self.item.item_name} in Drop Ship Order {self.dropship_order_head.number}"
+        
     
     
 
