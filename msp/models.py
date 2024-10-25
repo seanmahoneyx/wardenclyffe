@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.db.models import Sum, F
 
 
 ### STATIC MODELS ###
@@ -212,7 +213,7 @@ class Vendor(models.Model):
     def __str__(self):
         return self.vendor_name
 
-class Location(models.Model):
+class CustomerLocation(models.Model):
     is_active = models.BooleanField(default=True)    
     customer = models.ForeignKey('Customer', on_delete=models.CASCADE, null=True, blank=True)   
     location_name = models.CharField(max_length=100, unique=True)
@@ -231,7 +232,54 @@ class Location(models.Model):
     notes = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        return f"{self.customer} {self.ship_to_name}"
+        return f"{self.customer} {self.location_name}"
+    
+    @property
+    def contact_full_name(self):
+        if self.contact:
+            return f"{self.contact.first_name} {self.contact.last_name}"
+        return "No Contact Assigned"
+    
+class VendorLocation(models.Model):
+    is_active = models.BooleanField(default=True)    
+    vendor = models.ForeignKey('Customer', on_delete=models.CASCADE, null=True, blank=True)   
+    location_name = models.CharField(max_length=100, unique=True)
+    street = models.CharField(max_length=100, blank=False)
+    pobox = models.CharField(max_length=100, blank=False)
+    city = models.CharField(max_length=60, blank=False)
+    state = models.CharField(max_length=2, blank=False)
+    zip = models.PositiveIntegerField(blank=False)
+    contact_name = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="name")
+    contact_phone = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="phone")
+    contact_email = models.ForeignKey('Contact', on_delete=models.SET_NULL, null=True, related_name="email")
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.vendor} {self.location_name}"
+    
+    @property
+    def contact_full_name(self):
+        if self.contact:
+            return f"{self.contact.first_name} {self.contact.last_name}"
+        return "No Contact Assigned"
+    
+class Contact(models.Model):
+    CONTACT_TYPES = [
+        ('v', 'Vendor'),
+        ('c', 'Customer'),
+        ('o', 'Other'),
+    ]
+
+    type = models.CharField(max_length=10, choices=CONTACT_TYPES, null=False, blank=False)
+    first_name = models.CharField(max_length=50, null=False, blank=False)
+    last_name = models.CharField(max_length=50, null=True, blank=True)
+    title = models.CharField(max_length=100, null=True, blank=True)
+    phone = models.CharField(max_length=20, null=True, blank=True)
+    email = models.EmailField(max_length=254, null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
 
 
 ############ DYNAMIC MODELS ##################
@@ -241,6 +289,54 @@ class Location(models.Model):
 # NONPOSTING- Sales Order, Purchase Order, Quote, Blanket, Contract 
 # POSTING- Invoice, Bill, Item Receipt, Credit Memo, Vendor Credit, Inventory Adjustment, 
 
+## PRICING ##
+class CostListHead(models.Model):
+    item = models.ForeignKey('Item', on_delete=models.CASCADE, null=False)
+    vendor = models.ForeignKey('Vendor', on_delete=models.CASCADE, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    begin_effective_date = models.DateField(default=timezone.now, null=False)
+    end_effective_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Cost List for {self.item.item_name} - {self.vendor.vendor_name}"
+
+class CostListLine(models.Model):
+    cost_list_head = models.ForeignKey('CostListHead', on_delete=models.CASCADE, related_name='cost_lines')
+    quantity = models.PositiveIntegerField(null=False, blank=False, help_text="Minimum quantity for this cost to apply")
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+
+    class Meta:
+        unique_together = ('cost_list_head', 'quantity')
+        ordering = ['quantity']
+
+    def __str__(self):
+        return f"{self.cost_list_head.item.item_name} - {self.quantity}+ units: ${self.cost}"
+    
+class PriceListHead(models.Model):
+    item = models.ForeignKey('Item', on_delete=models.CASCADE, null=False)
+    customer = models.ForeignKey('Customer', on_delete=models.CASCADE, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    begin_effective_date = models.DateField(default=timezone.now, null=False)
+    end_effective_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"price List for {self.item.item_name} - {self.customer.customer_name}"
+
+class PriceListLine(models.Model):
+    price_list_head = models.ForeignKey('PriceListHead', on_delete=models.CASCADE, related_name='price_lines')
+    quantity = models.PositiveIntegerField(null=False, blank=False, help_text="Minimum quantity for this price to apply")
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+
+    class Meta:
+        unique_together = ('price_list_head', 'quantity')
+        ordering = ['quantity']
+
+    def __str__(self):
+        return f"{self.price_list_head.item.item_name} - {self.quantity}+ units: ${self.price}"    
+
+## BLANKETS AND CONTRACTS ##
 class ContractHead(models.Model):
     customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
     date_created = models.DateTimeField(auto_now_add=True, null=False)
@@ -257,7 +353,7 @@ class ContractLine(models.Model):
     item = models.ForeignKey('Item', on_delete=models.PROTECT)
     contract_quantity = models.PositiveIntegerField(null=False, blank=False)
     price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
-    minimum_release_quantity = models.PositiveIntegerField(null=False, blank=False)
+    minimum_release_quantity = models.PositiveIntegerField(null=True, blank=True)
     purchased_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
     received_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
     sold_quantity = models.PositiveIntegerField(default=0, null=False, blank=False)
@@ -265,23 +361,28 @@ class ContractLine(models.Model):
     def __str__(self):
         return f"Item {self.item} in Contract {self.contract.reference_number}"
     
-
+## SALES ORDERS ##
 class DropShipHead(models.Model):
     customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
     date_created = models.DateTimeField(auto_now_add=True, null=False)
     number = models.CharField(max_length=50, unique=True, null=False, blank=False)
-    bill_street = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_street')
-    bill_pobox = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_pobox')
-    bill_city = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_city')
-    bill_state = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_state')
-    bill_zip = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_zip')
-    ship_street = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='street')
-    ship_pobox = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='pobox')
-    ship_city = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='city')
-    ship_state = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='state')
-    ship_zip = models.ForeignKey('Location', on_delete=models.PROTECT, null=False, related_name='zip')
+    bill_to_street = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_street')
+    bill_to_pobox = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_pobox')
+    bill_to_city = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_city')
+    bill_to_state = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_state')
+    bill_to_zip = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_zip')
+    ship_from_street = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_from_pobox = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_from_city = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_from_state = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_from_zip = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='zip')
+    ship_to_street = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_to_pobox = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_to_city = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_to_state = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_to_zip = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='zip')
     customer_order_number = models.CharField(max_length=50, blank=True)
-    terms = models.ForeignKey('Terms', on_delete=models.PROTECT, null=False)
+    terms = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='terms')
     requested_date = models.DateField()
     sales_rep = models.ForeignKey('SalesRep', on_delete=models.PROTECT, null=False)
     ms_po_number = models.ForeignKey('PurchaseOrder', on_delete=models.SET_NULL, null=True, related_name='ms_po_number')
@@ -293,10 +394,15 @@ class DropShipHead(models.Model):
 
     def __str__(self):
         return f"Direct Order {self.number} for {self.customer}"
+    
+    @property
+    def total_amount(self):
+        return self.order_lines.aggregate(total=Sum(F('quantity') * F('price')))['total'] or 0
 
 class DropShipLine(models.Model):
     dropship_head = models.ForeignKey('DropShipHead', on_delete=models.CASCADE, related_name='order_lines')
     item = models.ForeignKey('Item', on_delete=models.PROTECT, blank=False, null=False)
+    contract = models.ForeignKey('ContractHead', on_delete=models.PROTECT, blank=True, null=True)
     quantity = models.PositiveIntegerField(null=False, blank=False) 
     price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True)
@@ -307,12 +413,107 @@ class DropShipLine(models.Model):
     def __str__(self):
         return f"Item {self.item.item_name} in Drop Ship Order {self.dropship_order_head.number}"
         
+class ReleaseHead(models.Model):
+    customer = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    number = models.CharField(max_length=50, unique=True, null=False, blank=False)
+    bill_to_street = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_street')
+    bill_to_pobox = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_pobox')
+    bill_to_city = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_city')
+    bill_to_state = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_state')
+    bill_to_zip = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='bill_zip')
+    ship_to_street = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_to_pobox = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_to_city = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_to_state = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_to_zip = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='zip')
+    customer_order_number = models.CharField(max_length=50, blank=True)
+    terms = models.ForeignKey('Customer', on_delete=models.PROTECT, null=False, related_name='terms')
+    requested_date = models.DateField()
+    ship_date = models.DateField()
+    sales_rep = models.ForeignKey('SalesRep', on_delete=models.PROTECT, null=False)
+    csr = models.ForeignKey('Employee', on_delete=models.PROTECT, null=True, related_name='csr')
+    priority = models.PositiveIntegerField(default=0)
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
+
+    class Meta:
+        ordering = ['date_created', 'priority']
+        
+    def __str__(self):
+        return f"Direct Order {self.number} for {self.customer}"
     
+    @property
+    def total_amount(self):
+        return self.release_lines.aggregate(total=Sum(F('quantity') * F('price')))['total'] or 0
+    
+class ReleaseLine(models.Model):
+    release_head = models.ForeignKey('ReleaseHead', on_delete=models.CASCADE, related_name='release_lines')
+    item = models.ForeignKey('Item', on_delete=models.PROTECT, blank=False, null=False)
+    quantity = models.PositiveIntegerField(null=False, blank=False) 
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True)
+    tax = models.ForeignKey('Tax', on_delete=models.PROTECT, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True) 
     
 
+    def __str__(self):
+        return f"Item {self.item.item_name} in Release {self.release.number}"   
+
+
+## PURCHASE ORDERS ## 
+class PurchaseHead(models.Model):
+    CATEGORY_TYPES =[
+        ('d', 'Drop Ship'),
+        ('w', 'Warehouse'),
+        ('c', 'Crossdock'),
+    ]
+    
+    vendor = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False)
+    date_created = models.DateTimeField(auto_now_add=True, null=False)
+    number = models.CharField(max_length=50, unique=True, null=False, blank=False)
+    category = models.CharField(choices=CATEGORY_TYPES)
+    bill_from_street = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='bill_street')
+    bill_from_pobox = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='bill_pobox')
+    bill_from_city = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='bill_city')
+    bill_from_state = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='bill_state')
+    bill_from_zip = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='bill_zip')
+    ship_from_street = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_from_pobox = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_from_city = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_from_state = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_from_zip = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=False, related_name='zip')
+    ship_to_street = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='street')
+    ship_to_pobox = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='pobox')
+    ship_to_city = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='city')
+    ship_to_state = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='state')
+    ship_to_zip = models.ForeignKey('CustomerLocation', on_delete=models.PROTECT, null=False, related_name='zip')
+    terms = models.ForeignKey('Vendor', on_delete=models.PROTECT, null=False, related_name='terms')
+    requested_date = models.DateField()
+    vendor_due_date = models.DateField()
+    ship_from = models.ForeignKey('VendorLocation', on_delete=models.PROTECT, null=True, related_name='location_name')
+    csr = models.ForeignKey('Employee', on_delete=models.PROTECT, null=True, related_name='csr')
+    buyer = models.ForeignKey('PurchaseOrder', on_delete=models.PROTECT, null=True, related_name='buyer')
+    attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
+
+    def __str__(self):
+        return f"Purchase Order {self.number}"
+    
+    @property
+    def total_amount(self):
+        return self.order_lines.aggregate(total=Sum(F('quantity') * F('price')))['total'] or 0
+
+class PurchaseLine(models.Model):
+    purchase_head = models.ForeignKey('PurchaseHead', on_delete=models.CASCADE, related_name='purchase_lines')
+    item = models.ForeignKey('Item', on_delete=models.PROTECT, blank=False, null=False)
+    contract = models.ForeignKey('ContractHead', on_delete=models.PROTECT, blank=True, null=True)
+    quantity = models.PositiveIntegerField(null=False, blank=False) 
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True)
+    tax = models.ForeignKey('Tax', on_delete=models.PROTECT, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True) 
+    
+
+    def __str__(self):
+        return f"Item {self.item} in Purchase Order {self.purchase_head.number}"
         
 # Inventory model
-
-# Vendor Price List (header + body)
-
-# Customer Price List (header + body)
