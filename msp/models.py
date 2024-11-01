@@ -94,7 +94,7 @@ class Item(models.Model):
     purch_desc = models.TextField(verbose_name="Purchase Description")
     sell_desc = models.TextField(verbose_name="Sell Description")
     category = models.CharField(choices=CATEGORY_TYPES, max_length=30)
-    test = models.CharField(choices=CATEGORY_TYPES, max_length=15)
+    test = models.CharField(choices=TEST_TYPES, max_length=15)
     flute = models.CharField(max_length=6)
     paper = models.CharField(max_length=4)
     is_printed = models.BooleanField(default=False)
@@ -156,6 +156,25 @@ class Tax(models.Model):
         return self.code
 
 class Account(models.Model):
+    ACCOUNT_TYPES = [
+        ('Income', 'Income'),
+        ('Expense', 'Expense'),
+        ('Fixed', 'Fixed Asset'),
+        ('Bank', 'Bank'),
+        ('Loan', 'Loan'),
+        ('Credit', 'Credit Card'),
+        ('Equity', 'Equity'),
+        ('AR', 'Accounts Receivable'),
+        ('OCA', 'Other Current Asset'),
+        ('Other Asset', 'Other Asset'),
+        ('AP', 'Accounts Payable'),
+        ('OCL', 'Other Current Liability'),
+        ('LTL', 'Long Term Liability'),
+        ('COGS', 'Cost of Goods Sold'),
+        ('Other Income', 'Other Income'),
+        ('Other Expense', 'Other Expense'),     
+    ]
+    
     is_active = models.BooleanField(default=True)
     account_type = models.CharField(max_length=50, blank=False)
     account_name = models.CharField(unique=True, max_length=100, blank=False)
@@ -170,7 +189,7 @@ class Customer(models.Model):
     create_date = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
     is_active = models.BooleanField(default=True)
     bill_street = models.CharField(max_length=100, blank=False)
-    bill_pobox = models.CharField(max_length=100, blank=False)
+    bill_pobox = models.CharField(max_length=100, blank=True)
     bill_city = models.CharField(max_length=60, blank=False)
     bill_state = models.CharField(max_length=2, blank=False)
     bill_zip = models.PositiveIntegerField(blank=False)
